@@ -1,16 +1,6 @@
-module ZCB where
+module Future_1 where
 
-	{-
-ZCB = Receive $100 on 31st of Dec 2015
-
-Contract properties
-Currency : $
-Amout : 100
-Action : Receive
-Date : 31st Dec 2015
-
-	-}
-
+-- import List
 import Numeric
 import Control.Monad
 -- import System
@@ -18,68 +8,92 @@ import Control.Monad
 import Data.Unique
 import Data.Time
 
-data Currency =  	USD 
-				|	GBP
-				|	LKR
-				deriving (Show,Eq,Ord)
+data Code = USD | GBP | LKR 
+	deriving (Eq, Show, Ord)
+
+data Symbol = IBM | SAMSUNG | DELL
+	deriving (Eq, Show, Ord)
+
+data Transfer = Currency Code | Equity Symbol | Null
+	deriving (Eq, Show, Ord)
 
 
-data Date = Date Int
-			deriving (Show,Eq,Ord)
+data MDate = MDate  Int
+	deriving Show
 
-newtype Obs a = Obs (Date -> a) -- (Date -> PR a) | my frst attempt Date -> Double --
+newtype Obs a = Obs (MDate -> a)
 
-today :: Date 
-today =  Date 0
+instance Show a => Show (Obs a) where
+   show (Obs o) = "(Obs " ++ show  (o today) ++ ")"	 
 
-instance Show a  =>  Show (Obs a) where
-	show (Obs o) = "(Obs " ++ show  (o today) ++ ")"	
+today :: MDate
+today = MDate 0 
 
-data Contract = 	Zero
-				|	One Currency
-				|	Give Contract
-				|	And Contract Contract
-				|	Or  Contract Contract
-				| 	Scale (Obs Double) Contract
-				|	When (Date) Contract
-				deriving  (Show)
+data Contract = Zero 	|	
+				One Transfer	|	
+				Give Contract 	|	
+				Or 	Contract Contract 	|
+				And Contract Contract 	|
+				Scale (Obs Double) 	Contract	|
+				When (Obs Bool) Contract 	
+			deriving Show
 
 
+-- **************************************
 
 -- Define a combinator interface to the Contract datatype
+ 	
+ -- [in contract we use combinators in simple letters -> to make  it sense for the language : we have to expose combinators to language data types via an interface] 
 
-{-- [in contract we use combinators in simple letters -> to make  it sense for the language :
-	 we have to expose combinators to language data types via an interface] -}
+-- **************************************
 
-one :: Currency -> Contract
+zero :: Contract
+zero = Zero
+
+one :: Transfer -> Contract
 one = One
+
+give :: Contract -> Contract
+give = Give
+
+cOr :: Contract -> Contract -> Contract
+cOr = Or
+
+cAnd :: Contract -> Contract -> Contract
+cAnd = And
 
 scale :: (Obs Double) -> Contract -> Contract
 scale = Scale
 
-cWhen :: (Date) -> Contract -> Contract
+cWhen :: Obs Bool -> Contract -> Contract
 cWhen = When
 
-
--- ***************** Defining Observables ***********************---------
-
-konst:: a -> Obs a
-konst a = Obs (\t ->  a)
-
-
-
-{-Write down the symbolic representation of ZCB- ZCB :: this must be in combinators introduced by simon payton jones
-	zcb :: cWhen t (scale d (one k) )
-
-	instructions 
-	1. first write combinators in "lowercase"
-	2. then create data types for "Contracts & Observables"
-
-	since zcb is not a combinator --> it takes parameters in the type signature
+{-
+********************** Defining Observables *************************
 -}
 
-zcb :: Date -> Double -> Currency -> Contract
-zcb t d k = cWhen t (scale (konst d) (one k))
+konst :: a -> Obs a
+konst k = Obs (\t -> k)
+
+sameDate :: MDate -> MDate -> Bool
+sameDate (MDate d1) (MDate d2) = (d1 == d2)
+
+at :: MDate -> Obs Bool
+at t_future = Obs (\t ->  sameDate t_future t)
+
+{-
+
+**************************************** Defining Zero Coupon Bond  ********************************************
+-}
+
+zcb :: MDate -> Double -> Transfer -> Contract
+zcb t x k = cWhen (at t) (scale (konst x) (one k))
+
+c2 = zcb (MDate 0) 200.0 (Currency LKR)
+
+c3 :: Contract
+c3 = Give c2
 
 
- 
+
+
