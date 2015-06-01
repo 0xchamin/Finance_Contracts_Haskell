@@ -30,7 +30,6 @@ module FuturesContract where
 	here we have to model both receiving of cash and payment
 
 -}
--- ********************************************************************************************************
 
 -- import List
 import Numeric
@@ -39,34 +38,37 @@ import Control.Monad
 -- import Text.XHtml.Strict
 import Data.Unique
 import Data.Time
---import Control.Monad.when
 
-data Currency = USD | GBP | LKR 
-					deriving (Eq, Show, Ord)
+data Code = USD | GBP | LKR 
+	deriving (Eq, Show, Ord)
 
-data Brand = IBM | DELL | SAMSUNG
-				    deriving (Eq, Show, Ord)
+data Symbol = IBM | SAMSUNG | DELL
+	deriving (Eq, Show, Ord)
 
-data MDate = MDate Int 
+data Transfer = Currency Code | Equity Symbol | Null
+	deriving (Eq, Show, Ord)
+
+
+data MDate = MDate  Int
 	deriving Show
 
--- Observable data type -----
 newtype Obs a = Obs (MDate -> a)
 
-instance Show a  =>  Show (Obs a) where
-	show (Obs o) = "(Obs " ++ show  (o today) ++ ")"	 
+instance Show a => Show (Obs a) where
+   show (Obs o) = "(Obs " ++ show  (o today) ++ ")"	 
 
-today :: MDate 
-today = MDate 0
+today :: MDate
+today = MDate 0 
 
-
-data Contract = Zero 	|
-				One Currency	|
-				Give Contract 	|
-				Scale (Obs Double) Contract 	|
-				When (MDate) Contract 	|
-				And Contract Contract
-				deriving Show
+data Contract = Zero 	|	
+				One Transfer	|	
+				Give Contract 	|	
+				Get Contract 	|
+				Or 	Contract Contract 	|
+				And Contract Contract 	|
+				Scale (Obs Double) 	Contract	|
+				When (Obs Bool) Contract 	
+			deriving Show
 
 
 -- **************************************
@@ -77,72 +79,82 @@ data Contract = Zero 	|
 
 -- **************************************
 
-one :: Currency -> Contract
+zero :: Contract
+zero = Zero
+
+one :: Transfer -> Contract
 one = One
 
-scale :: Obs Double -> Contract -> Contract
-scale = Scale
+give :: Contract -> Contract
+give = Give
 
-when :: MDate -> Contract -> Contract
-when = When
+get :: Contract -> Contract
+get = Get
+
+cOr :: Contract -> Contract -> Contract
+cOr = Or
 
 cAnd :: Contract -> Contract -> Contract
-cAnd = And 
+cAnd = And
+
+scale :: (Obs Double) -> Contract -> Contract
+scale = Scale
+
+cWhen :: Obs Bool -> Contract -> Contract
+cWhen = When
 
 {-
-According to contract language the primitives over abservables, the constand defined as mehtod signature
-When looking at "Obs a" definition, it says, taking date as an input parameter and returns time variying value. 
-So we add "\t". 
+********************** Defining Observables *************************
 -}
 
 konst :: a -> Obs a
 konst k = Obs (\t -> k)
 
-{-
+sameDate :: MDate -> MDate -> Bool
+sameDate (MDate d1) (MDate d2) = (d1 == d2)
 
-----------------************* Derived primitive ***************  -------------
-
--}
-
-
-sharePrice ::  Obs Double -> Contract -> Contract
-sharePrice od u = scale od u 
-
-testing :: MDate ->  Double  -> Currency  -> Contract
-testing t d  k = (When t) (Scale (konst d) (One k)) 
-
-
-{-
-payment t d  k = (when t) (scale (konst d) (one k)) 
-----------------************* Payment of cash ***************  ------------ 
-c1 :: Contract
-c1 = sharePrice
-
-ghci >future (MDate 2) (Equity IBM) 200 120 (Currency GBP)
-And (When (Obs False) (Scale (Obs 200.0) (One (Equity IBM)))) (Give (When (Obs False) (Scale (Obs 120.0) (One (Currency GBP)))))
-
-
--}
-
-
+at :: MDate -> Obs Bool
+at t_future = Obs (\t ->  sameDate t_future t)
 
 {-
 
-----------------************* Receiving of IBM sares ***************  -------------
+**************************************** Defining Zero Coupon Bond  ********************************************
+-}
 
-----------------************* Payment of cash ***************  ------------
+zcb :: MDate -> Double -> Transfer -> Contract
+zcb t x k = cWhen (at t) (scale (konst x) (one k))
+
+--c2 = zcb (MDate 0) 200.0 (Currency LKR)
+
+--c3 :: Contract
+--c3 = Give c2
+
+{-
+
+**************************************** Receiving of Goods  ********************************************
+goodsReceive = get (zcb (MDate 2) 200.0 (Equity IBM))
 
 -}
------- ************** Defining Future Contract ************** -----------
+
+goodsReceive :: MDate -> Double -> Transfer -> Contract
+goodsReceive excerciseDate quantity commodity = get (zcb (excerciseDate) quantity (commodity))
+
+{-
+
+**************************************** Cash settlement  ********************************************
+settlement = give (zcb (MDate 2) 200.0 (Currency LKR))
+
+-}
+
+settlement :: MDate -> Double -> Transfer -> Contract
+settlement excerciseDate price currency = give (zcb (excerciseDate) price (currency))
+
 
 
 {-
-t - Exercise date
-q - Quantity
-b - brand
-sp - sharePrice
+
+**************************************** Future's Contract  ********************************************
 -}
 
---furure :: MDate -> Double -> Brand -> sharePrice -> Contract
---sfurure t q b sp = when t 
- 
+future :: MDate -> Double -> Transfer -> Double -> Transfer -> Contract
+future excerciseDate quantity commodity price currency = cAnd (goodsReceive excerciseDate quantity commodity) (settlement excerciseDate price currency) 
